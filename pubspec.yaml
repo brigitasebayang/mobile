@@ -1,28 +1,17 @@
-name: reusemart_mobile
-description: A Flutter app for Reusemart consignment platform.
-
+name: mobile
+description: "Reusemart Mobile App"
 publish_to: 'none'
 
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: '>=3.4.4 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
-  
-  # State Management
-  provider: ^6.1.1
-  
-  # HTTP requests
+  cupertino_icons: ^1.0.6
   http: ^1.1.0
-  
-  # Local storage
-  shared_preferences: ^2.2.2
-  
-  # UI
-  cupertino_icons: ^1.0.2
 
 dev_dependencies:
   flutter_test:

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
+import '../services/api_service.dart';
 import '../models/user_model.dart';
 import '../config/app_config.dart';
 
@@ -35,15 +36,16 @@ class AuthProvider with ChangeNotifier {
       
       if (storedToken != null) {
         _token = storedToken;
+        ApiService.setToken(storedToken);
         
         // Validate token with server
-        final userData = await AuthService.getUserProfile(storedToken);
-        if (userData != null) {
-          _user = User.fromJson(userData); // userData is already Map<String, dynamic>
+        final response = await AuthService.getUserProfile(storedToken);
+        if (response.success && response.data != null) {
+          _user = response.data!;
           _isAuthenticated = true;
           AppConfig.debugPrint('User authenticated: ${_user!.email}');
         } else {
-          AppConfig.debugPrint('Token validation failed');
+          AppConfig.debugPrint('Token validation failed: ${response.message}');
           await _clearAuthData();
         }
       }
@@ -64,15 +66,18 @@ class AuthProvider with ChangeNotifier {
 
     try {
       final response = await AuthService.login(email, password);
-      AppConfig.debugPrint('Login response: $response');
+      AppConfig.debugPrint('Login response: ${response.success}');
       
-      if (response['success'] == true) {
-        final userData = response['data']['user'] as Map<String, dynamic>;
-        final token = response['data']['access_token'] as String;
+      if (response.success && response.data != null) {
+        final userData = response.data!['user'] as Map<String, dynamic>;
+        final token = response.data!['access_token'] as String;
         
         _token = token;
-        _user = User.fromJson(userData); // userData is Map<String, dynamic>
+        _user = User.fromJson(userData);
         _isAuthenticated = true;
+        
+        // Set token for future API calls
+        ApiService.setToken(token);
         
         // Save token to shared preferences
         final prefs = await SharedPreferences.getInstance();
@@ -83,7 +88,7 @@ class AuthProvider with ChangeNotifier {
         notifyListeners();
         return true;
       } else {
-        _errorMessage = response['message'] ?? 'Login failed';
+        _errorMessage = response.message;
         AppConfig.debugPrint('Login failed: $_errorMessage');
         _isLoading = false;
         notifyListeners();
@@ -92,6 +97,51 @@ class AuthProvider with ChangeNotifier {
     } catch (e) {
       _errorMessage = 'Network error: ${e.toString()}';
       AppConfig.debugPrint('Login error: $_errorMessage');
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> register(String name, String email, String password) async {
+    AppConfig.debugPrint('Attempting registration for: $email');
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final response = await AuthService.register(name, email, password);
+      AppConfig.debugPrint('Register response: ${response.success}');
+      
+      if (response.success && response.data != null) {
+        final userData = response.data!['user'] as Map<String, dynamic>;
+        final token = response.data!['access_token'] as String;
+        
+        _token = token;
+        _user = User.fromJson(userData);
+        _isAuthenticated = true;
+        
+        // Set token for future API calls
+        ApiService.setToken(token);
+        
+        // Save token to shared preferences
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('auth_token', token);
+        
+        AppConfig.debugPrint('Registration successful for: ${_user!.email}');
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      } else {
+        _errorMessage = response.message;
+        AppConfig.debugPrint('Registration failed: $_errorMessage');
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+    } catch (e) {
+      _errorMessage = 'Network error: ${e.toString()}';
+      AppConfig.debugPrint('Registration error: $_errorMessage');
       _isLoading = false;
       notifyListeners();
       return false;
@@ -127,6 +177,9 @@ class AuthProvider with ChangeNotifier {
     _token = null;
     _user = null;
     
+    // Clear API service token
+    ApiService.clearToken();
+    
     // Clear stored token
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('auth_token');
@@ -136,5 +189,19 @@ class AuthProvider with ChangeNotifier {
   void clearError() {
     _errorMessage = null;
     notifyListeners();
+  }
+
+  Future<void> refreshUserData() async {
+    if (_token != null) {
+      try {
+        final response = await AuthService.getUserProfile(_token!);
+        if (response.success && response.data != null) {
+          _user = response.data!;
+          notifyListeners();
+        }
+      } catch (e) {
+        AppConfig.debugPrint('Error refreshing user data: $e');
+      }
+    }
   }
 }
